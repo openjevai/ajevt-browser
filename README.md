@@ -4,6 +4,8 @@
 
 A bounded Jev System-1 browser tool for Pi, OpenCode V2, Amp, and MCP. A single `ajevt_browser` call runs an observe/decide/validate/act loop using Vercel `agent-browser`.
 
+**OpenJEV support:** Jev is built by [TypeSafe](https://typesafe.ai). This fork keeps TypeSafe as the default and adds optional support for [OpenJEV](https://openjev.sh), a free community gateway to the same Jev model — set `OPENJEV_API_KEY` (or `JEV_PROVIDER=openjev`) to use it. Original project: https://github.com/XYenon/ajevt-browser by @XYenon.
+
 ## Architecture
 
 ```text
@@ -157,6 +159,23 @@ export JEV_HEADERS='{"x-provider-route":"fast"}'
 export JEV_TIMEOUT_MS='2000' # timeout for each attempt
 export JEV_RETRIES='5'       # retries after the first attempt; range 0-5
 ```
+
+### OpenJEV provider
+
+[OpenJEV](https://openjev.sh) is a free community gateway to the same Jev model. TypeSafe remains the default; OpenJEV is opt-in.
+
+Provider selection (in priority order):
+
+1. **Explicit choice** — set `JEV_PROVIDER=openjev` to force OpenJEV, or `JEV_PROVIDER=typesafe` to force TypeSafe.
+2. **TypeSafe if its key is set** — unchanged default when `JEV_API_KEY` or `TYPESAFE_API_KEY` is present.
+3. **OpenJEV if only `OPENJEV_API_KEY` is set** — auto-selected when no TypeSafe key is found.
+
+```bash
+export JEV_PROVIDER='openjev'   # explicit: use OpenJEV
+export OPENJEV_API_KEY='...'     # from https://openjev.sh/dashboard
+```
+
+When OpenJEV is selected, the endpoint becomes `https://api.openjev.sh/v1/systemone` and the model becomes `openjev`. Explicit `JEV_ENDPOINT` / `JEV_MODEL` overrides still take precedence. HTTP 503 (OpenJEV overload) is retried alongside the existing 429/5xx retry statuses.
 
 OpenCode `plugins[].options` can apply the highest-priority override using the same document shape. The `package` entry takes an npm name or a local path:
 

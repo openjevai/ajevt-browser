@@ -4,6 +4,8 @@ import { isAbsolute, join } from "node:path";
 import type { JevConfig } from "./jev.js";
 
 const DEFAULT_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
+const OPENJEV_ENDPOINT = "https://api.openjev.sh/v1/systemone";
+const OPENJEV_MODEL = "openjev";
 const MAX_SECRET_BYTES = 16 * 1024;
 const FORBIDDEN_HEADERS = new Set([
   "authorization",
@@ -130,9 +132,35 @@ function readConfig(path: string): DecisionPatch {
 
 function parseEnvironment(env: NodeJS.ProcessEnv): DecisionPatch {
   const patch: DecisionPatch = {};
+  const provider = env.JEV_PROVIDER;
+  const hasTypesafeKey = !!(env.JEV_API_KEY || env.TYPESAFE_API_KEY);
+  const hasOpenjevKey = !!env.OPENJEV_API_KEY;
+  // Provider selection: explicit JEV_PROVIDER=openjev wins; otherwise, if no
+  // TypeSafe key is set but OPENJEV_API_KEY is, auto-select OpenJEV.
+  const useOpenjev =
+    provider === "openjev" || (provider === undefined && !hasTypesafeKey && hasOpenjevKey);
+  if (useOpenjev) {
+    if (!env.JEV_ENDPOINT) patch.endpoint = OPENJEV_ENDPOINT;
+    if (!env.JEV_MODEL) patch.model = OPENJEV_MODEL;
+  }
   if (env.JEV_ENDPOINT) patch.endpoint = env.JEV_ENDPOINT;
   if (env.JEV_MODEL) patch.model = env.JEV_MODEL;
-  const keyName = env.JEV_API_KEY ? "JEV_API_KEY" : env.TYPESAFE_API_KEY ? "TYPESAFE_API_KEY" : undefined;
+  // Key priority: when using OpenJEV, prefer OPENJEV_API_KEY; otherwise TypeSafe first.
+  const keyName = useOpenjev
+    ? env.OPENJEV_API_KEY
+      ? "OPENJEV_API_KEY"
+      : env.JEV_API_KEY
+        ? "JEV_API_KEY"
+        : env.TYPESAFE_API_KEY
+          ? "TYPESAFE_API_KEY"
+          : undefined
+    : env.JEV_API_KEY
+      ? "JEV_API_KEY"
+      : env.TYPESAFE_API_KEY
+        ? "TYPESAFE_API_KEY"
+        : env.OPENJEV_API_KEY
+          ? "OPENJEV_API_KEY"
+          : undefined;
   if (keyName) patch.auth = { env: keyName };
   if (env.JEV_HEADERS) {
     let headers: unknown;
@@ -233,7 +261,7 @@ export function resolveJevConfig(options: ResolveJevConfigOptions = {}): JevConf
   const url = new URL(endpoint);
   if (!merged.auth)
     throw new Error(
-      "No Jev authentication configured. Set JEV_API_KEY (or TYPESAFE_API_KEY), or configure decision.auth",
+      "No Jev authentication configured. Set JEV_API_KEY (or TYPESAFE_API_KEY, OPENJEV_API_KEY), or configure decision.auth",
     );
   const loopback = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
   if (url.username || url.password)
